@@ -1,0 +1,28 @@
+# Model checkpoints (large binary files — keep locally)
+checkpoints/*.pt
+
+# TensorBoard logs
+runs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Editor
+.cursor/
+
+# Build / dist
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store

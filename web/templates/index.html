@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Four - vs AI</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --surface: #16213e;
+            --accent: #e94560;
+            --cell-empty: #0f3460;
+            --cell-human: #e94560;
+            --cell-ai: #f9a826;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+        h1 { margin-bottom: 0.5rem; font-weight: 600; }
+        .subtitle { color: #888; margin-bottom: 1.5rem; }
+
+        /* Start screen */
+        #start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+        #start-screen p { font-size: 1.1rem; margin: 0; }
+        .start-buttons { display: flex; gap: 1rem; }
+        .start-btn {
+            padding: 0.7rem 1.6rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.15s;
+        }
+        .start-btn:hover { opacity: 0.85; }
+        .start-btn.human { background: var(--cell-human); color: #fff; }
+        .start-btn.ai    { background: var(--cell-ai); color: #1a1a2e; }
+
+        /* Game area */
+        #game-area { display: none; flex-direction: column; align-items: center; }
+        .board-container {
+            background: var(--surface);
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 60px);
+            grid-template-rows: repeat(6, 60px);
+            gap: 4px;
+            background: #0a0a0a;
+            padding: 8px;
+            border-radius: 8px;
+        }
+        .cell {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--cell-empty);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .cell:hover { background: #1a3a5c; }
+        .cell.human { background: var(--cell-human); }
+        .cell.ai    { background: var(--cell-ai); }
+        .cell.win   { box-shadow: 0 0 0 3px #fff; }
+        .board.disabled .cell { cursor: not-allowed; pointer-events: none; }
+        .status {
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            min-height: 1.5rem;
+        }
+        .status.win  { color: #4ade80; }
+        .status.lose { color: var(--accent); }
+        .status.draw { color: #fbbf24; }
+        button.reset {
+            margin-top: 1rem;
+            padding: 0.6rem 1.5rem;
+            font-size: 1rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button.reset:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <h1>Connect Four</h1>
+
+    <!-- Start screen: choose who goes first -->
+    <div id="start-screen">
+        <p>Who goes first?</p>
+        <div class="start-buttons">
+            <button class="start-btn human" onclick="startGame(true)">I go first</button>
+            <button class="start-btn ai"    onclick="startGame(false)">AI goes first</button>
+        </div>
+    </div>
+
+    <!-- Game area (hidden until choice is made) -->
+    <div id="game-area">
+        <p class="subtitle" id="subtitle"></p>
+        <div class="board-container">
+            <div class="board" id="board"></div>
+            <div class="status" id="status"></div>
+            <button class="reset" id="reset">New Game</button>
+        </div>
+    </div>
+
+    <script>
+        const ROWS = 6, COLS = 7;
+        let board = Array(ROWS * COLS).fill(0);
+        let currentPlayer = 1;   // whose turn it is (1 or -1)
+        let humanPlayer = 1;      // which player number the human controls
+        let gameOver = false;
+
+        function startGame(humanFirst) {
+            humanPlayer = humanFirst ? 1 : -1;
+            board = Array(ROWS * COLS).fill(0);
+            currentPlayer = 1;
+            gameOver = false;
+
+            const sub = document.getElementById('subtitle');
+            if (humanFirst) {
+                sub.textContent = 'You (● red) vs AI (● yellow)';
+            } else {
+                sub.textContent = 'AI (● red) vs You (● yellow)';
+            }
+
+            document.getElementById('start-screen').style.display = 'none';
+            const gameArea = document.getElementById('game-area');
+            gameArea.style.display = 'flex';
+
+            initBoard();
+            document.getElementById('status').textContent = humanFirst ? 'Your turn' : 'AI thinking...';
+
+            if (!humanFirst) {
+                // AI goes first as player 1
+                setTimeout(doAITurn, 300);
+            }
+        }
+
+        function initBoard() {
+            const el = document.getElementById('board');
+            el.innerHTML = '';
+            el.classList.remove('disabled');
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.col = c;
+                    cell.dataset.row = r;
+                    cell.addEventListener('click', () => handleClick(parseInt(cell.dataset.col)));
+                    el.appendChild(cell);
+                }
+            }
+        }
+
+        function getBoardIndex(row, col) { return row * COLS + col; }
+
+        function getDropRow(col) {
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[getBoardIndex(r, col)] === 0) return r;
+            }
+            return -1;
+        }
+
+        function makeMove(col, player) {
+            const row = getDropRow(col);
+            if (row < 0) return false;
+            board[getBoardIndex(row, col)] = player;
+            updateBoard();
+            return true;
+        }
+
+        function updateBoard() {
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach((cell, i) => {
+                cell.classList.remove('human', 'ai', 'win');
+                const val = board[i];
+                if (val === humanPlayer)       cell.classList.add('human');
+                else if (val === -humanPlayer) cell.classList.add('ai');
+            });
+        }
+
+        function highlightWin(line) {
+            if (!line) return;
+            const cells = document.querySelectorAll('.cell');
+            line.forEach(([r, c]) => cells[getBoardIndex(r, c)].classList.add('win'));
+        }
+
+        async function checkWin() {
+            const res = await fetch('/check_win', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ board })
+            });
+            return res.json();
+        }
+
+        async function fetchAIMove() {
+            const res = await fetch('/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ board, currentPlayer })
+            });
+            return res.json();
+        }
+
+        function setStatus(text, cls = '') {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = 'status' + (cls ? ' ' + cls : '');
+        }
+
+        function endGame(msg, cls) {
+            gameOver = true;
+            setStatus(msg, cls);
+            document.getElementById('board').classList.add('disabled');
+        }
+
+        async function doAITurn() {
+            setStatus('AI thinking...');
+            const ai = await fetchAIMove();
+            if (ai.error) { console.error(ai.error); return; }
+            if (ai.gameOver) {
+                endGame(ai.winner === 0 ? 'Draw!' : 'AI wins!', ai.winner === 0 ? 'draw' : 'lose');
+                return;
+            }
+            makeMove(ai.action, currentPlayer);
+            currentPlayer = -currentPlayer;
+            const result = await checkWin();
+            if (result.winner) {
+                highlightWin(result.winningLine);
+                endGame('AI wins!', 'lose');
+            } else if (result.isDraw) {
+                endGame('Draw!', 'draw');
+            } else {
+                setStatus('Your turn');
+            }
+        }
+
+        async function handleClick(col) {
+            if (gameOver || currentPlayer !== humanPlayer) return;
+            if (getDropRow(col) < 0) return;
+
+            makeMove(col, currentPlayer);
+            currentPlayer = -currentPlayer;
+
+            const result = await checkWin();
+            if (result.winner) {
+                highlightWin(result.winningLine);
+                endGame('You win!', 'win');
+                return;
+            }
+            if (result.isDraw) {
+                endGame('Draw!', 'draw');
+                return;
+            }
+
+            await doAITurn();
+        }
+
+        document.getElementById('reset').addEventListener('click', () => {
+            document.getElementById('game-area').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'flex';
+            document.getElementById('status').textContent = '';
+            document.getElementById('status').className = 'status';
+        });
+    </script>
+</body>
+</html>
