@@ -16,10 +16,13 @@ from src.config import (
     CHECKPOINT_DIR,
     CHECKPOINT_EVERY,
     GAMES_PER_ITERATION,
+    GRAD_CLIP,
     LEARNING_RATE,
+    LR_DECAY_GAMMA,
     MCTS_SIMULATIONS,
     TRAINING_EPOCHS,
     VALUE_LOSS_WEIGHT,
+    WEIGHT_DECAY,
     get_device,
 )
 from src.network import ConnectFourNet
@@ -164,11 +167,14 @@ def main():
         print(f"Resumed from {resume_path}")
     network = network.to(device)
 
-    optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=LR_DECAY_GAMMA)
     if resume_path:
         ckpt = torch.load(resume_path, map_location=device, weights_only=False)
         if "optimizer" in ckpt:
             optimizer.load_state_dict(ckpt["optimizer"])
+        if "scheduler" in ckpt:
+            scheduler.load_state_dict(ckpt["scheduler"])
 
     buffer: deque = deque(maxlen=BUFFER_SIZE)
     writer = SummaryWriter(args.logdir)
@@ -201,7 +207,11 @@ def main():
             training_epochs=training_epochs,
             batch_size=batch_size,
             value_loss_weight=VALUE_LOSS_WEIGHT,
+            grad_clip=GRAD_CLIP,
         )
+        scheduler.step()
+        if writer:
+            writer.add_scalar("train/lr", scheduler.get_last_lr()[0], iteration)
 
         if (iteration + 1) % 10 == 0 or iteration == 0:
             tqdm.write(
@@ -245,6 +255,7 @@ def main():
                 {
                     "model": network.state_dict(),
                     "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
                     "iteration": iteration + 1,
                 },
                 path,

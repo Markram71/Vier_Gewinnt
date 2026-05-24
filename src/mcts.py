@@ -8,7 +8,7 @@ import torch
 
 from .game import ConnectFour
 from .network import ConnectFourNet
-from .config import BOARD_COLS, MCTS_SIMULATIONS, PUCT_C
+from .config import BOARD_COLS, DIRICHLET_ALPHA, DIRICHLET_EPSILON, MCTS_SIMULATIONS, PUCT_C
 
 
 class MCTSNode:
@@ -33,13 +33,11 @@ class MCTSNode:
         return len(self.children) > 0
 
     def ucb_score(self, c: float = PUCT_C) -> float:
-        """PUCT score for selection."""
-        if self.visit_count == 0:
-            return float("inf") if self.prior > 0 else 0.0
+        """Standard AlphaZero PUCT score: Q(s,a) + C·P(s,a)·√N(s) / (1 + N(s,a))."""
         parent_visits = self.parent.visit_count if self.parent else 1
-        exploitation = self.value_sum / self.visit_count
-        exploration = c * math.sqrt(math.log(parent_visits + 1) / (self.visit_count + 1e-8))
-        return exploitation + exploration + self.prior * math.sqrt(parent_visits) / (self.visit_count + 1)
+        q = self.value_sum / self.visit_count if self.visit_count > 0 else 0.0
+        u = c * self.prior * math.sqrt(parent_visits) / (1 + self.visit_count)
+        return q + u
 
     def select_child(self, c: float = PUCT_C) -> "MCTSNode":
         """Select child with highest UCB score."""
@@ -54,10 +52,16 @@ class MCTS:
         network: ConnectFourNet,
         num_simulations: int = MCTS_SIMULATIONS,
         device: Optional[torch.device] = None,
+        add_noise: bool = False,
+        dirichlet_alpha: float = DIRICHLET_ALPHA,
+        dirichlet_epsilon: float = DIRICHLET_EPSILON,
     ):
         self.network = network
         self.num_simulations = num_simulations
         self.device = device or torch.device("cpu")
+        self.add_noise = add_noise
+        self.dirichlet_alpha = dirichlet_alpha
+        self.dirichlet_epsilon = dirichlet_epsilon
 
     def run(self, state: ConnectFour) -> np.ndarray:
         """
@@ -67,6 +71,15 @@ class MCTS:
             visit_counts: (BOARD_COLS,) - normalized to get policy target
         """
         root = MCTSNode(state)
+        # Expand root immediately so noise can be applied to child priors
+        if not state.is_terminal():
+            self._expand_and_backup(root, state.clone())
+        if self.add_noise and root.is_expanded():
+            actions = list(root.children.keys())
+            noise = np.random.dirichlet([self.dirichlet_alpha] * len(actions))
+            eps = self.dirichlet_epsilon
+            for i, a in enumerate(actions):
+                root.children[a].prior = (1 - eps) * root.children[a].prior + eps * noise[i]
 
         for _ in range(self.num_simulations):
             node = root

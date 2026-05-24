@@ -18,6 +18,7 @@ from .config import (
     CHECKPOINT_DIR,
     CHECKPOINT_EVERY,
     GAMES_PER_ITERATION,
+    GRAD_CLIP,
     LEARNING_RATE,
     MCTS_SIMULATIONS,
     TRAINING_EPOCHS,
@@ -39,6 +40,7 @@ def train_iteration(
     training_epochs: int = TRAINING_EPOCHS,
     batch_size: int = BATCH_SIZE,
     value_loss_weight: float = VALUE_LOSS_WEIGHT,
+    grad_clip: float = GRAD_CLIP,
 ) -> dict:
     """
     Run one training iteration: generate self-play data, add to buffer, train.
@@ -95,6 +97,7 @@ def train_iteration(
             loss = policy_loss + value_loss_weight * value_loss
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(network.parameters(), grad_clip)
             optimizer.step()
 
             total_loss += loss.item()

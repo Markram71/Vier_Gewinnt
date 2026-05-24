@@ -35,7 +35,7 @@ def generate_self_play_data(
     """
     import torch
     device = device or torch.device("cpu")
-    mcts = MCTS(network=network, num_simulations=num_simulations, device=device)
+    mcts = MCTS(network=network, num_simulations=num_simulations, device=device, add_noise=True)
 
     data: List[Tuple[np.ndarray, np.ndarray, float]] = []
 
