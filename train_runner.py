@@ -2,6 +2,7 @@
 """CLI entry point for training the Connect Four AlphaZero network."""
 
 import argparse
+import json
 from collections import deque
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from src.config import (
     get_device,
 )
 from src.network import ConnectFourNet
+from src.strength_eval import eval_strength
 from src.train import train_iteration
 
 
@@ -123,6 +125,19 @@ def main():
         default=40,
         help="Games to play for eval gate (default: 40)",
     )
+    parser.add_argument(
+        "--strength-eval-interval",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Evaluate playing strength vs baselines every N iterations and log to TensorBoard (0 = disabled)",
+    )
+    parser.add_argument(
+        "--strength-eval-games",
+        type=int,
+        default=20,
+        help="Games per baseline for strength evaluation (default: 20)",
+    )
     args = parser.parse_args()
 
     # Quick mode: use smaller values without mutating the config module
@@ -165,6 +180,13 @@ def main():
         start_iter = ckpt.get("iteration", 0)
 
     best_model_path = checkpoint_dir / "best_model.pt"
+    strength_history_path = checkpoint_dir / "strength_history.json"
+
+    # Load existing strength history so resumed runs append rather than overwrite
+    strength_history: list = []
+    if strength_history_path.exists():
+        with open(strength_history_path) as f:
+            strength_history = json.load(f).get("entries", [])
 
     for iteration in tqdm(range(start_iter, args.iterations), desc="Training"):
         metrics = train_iteration(
@@ -189,6 +211,33 @@ def main():
                 f"policy_acc={metrics['policy_acc']:.3f} "
                 f"value_mse={metrics['value_mse']:.4f}"
             )
+
+        # Strength evaluation against simple baselines
+        if args.strength_eval_interval > 0 and (iteration + 1) % args.strength_eval_interval == 0:
+            network.eval()
+            tqdm.write(f"  Strength eval at iter {iteration + 1}...")
+            strength = eval_strength(
+                network,
+                n_games=args.strength_eval_games,
+                num_simulations=20,
+                device=device,
+            )
+            network.train()
+            tqdm.write(
+                f"  vs random: {strength['vs_random']:.0%}  "
+                f"vs heuristic: {strength['vs_heuristic']:.0%}"
+            )
+            if writer:
+                writer.add_scalar("strength/vs_random", strength["vs_random"], iteration + 1)
+                writer.add_scalar("strength/vs_heuristic", strength["vs_heuristic"], iteration + 1)
+            strength_history.append({
+                "iteration": iteration + 1,
+                "vs_random": strength["vs_random"],
+                "vs_heuristic": strength["vs_heuristic"],
+                "n_games": args.strength_eval_games,
+            })
+            with open(strength_history_path, "w") as f:
+                json.dump({"entries": strength_history}, f, indent=2)
 
         if (iteration + 1) % CHECKPOINT_EVERY == 0:
             path = checkpoint_dir / f"checkpoint_iter_{iteration + 1}.pt"

@@ -6,3 +6,4 @@ flask
 rich
 torchviz
 pytest
+matplotlib
