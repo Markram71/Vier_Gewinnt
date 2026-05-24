@@ -51,6 +51,7 @@ def scan_checkpoints(
     checkpoint_dir: Path,
     history_path: Path,
     n_games: int,
+    num_simulations: int,
     device: torch.device,
 ) -> list:
     """Evaluate all checkpoint_iter_*.pt files; skip already-cached iterations."""
@@ -79,7 +80,7 @@ def scan_checkpoints(
             continue
         try:
             net = load_network(ckpt_path, device)
-            strength = eval_strength(net, n_games=n_games, num_simulations=20, device=device)
+            strength = eval_strength(net, n_games=n_games, num_simulations=num_simulations, device=device)
             cached[iteration] = {
                 "iteration": iteration,
                 "vs_random": strength["vs_random"],
@@ -163,6 +164,12 @@ def main():
         default=20,
         help="Games per checkpoint when scanning (default: 20)",
     )
+    parser.add_argument(
+        "--simulations",
+        type=int,
+        default=5,
+        help="MCTS simulations per move when scanning (default: 5, lower = faster)",
+    )
     parser.add_argument("--device", type=str, default=None, help="Device override (cpu/cuda/mps)")
     args = parser.parse_args()
 
@@ -171,7 +178,7 @@ def main():
     if args.scan:
         device = get_device(args.device)
         print(f"Device: {device}")
-        entries = scan_checkpoints(args.checkpoint_dir, history_path, args.games, device)
+        entries = scan_checkpoints(args.checkpoint_dir, history_path, args.games, args.simulations, device)
     elif history_path.exists():
         with open(history_path) as f:
             entries = json.load(f).get("entries", [])
