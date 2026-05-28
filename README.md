@@ -2,6 +2,13 @@
 
 An AlphaZero-style implementation of Connect Four in Python with PyTorch. The neural network learns to play through self-play and Monte Carlo Tree Search (MCTS).
 
+## Background
+In 1990, as high school student, I have developed the first Connect Four (German: Vier Gewinnt) computer game version of this traditional game. In the computer science class, we tasked ourselfs to develop different heuristics and strategies to play the game. Before we could run our own heuristics against each other we needed to create a the game environment. Then each student could develop their own heuristic. I remember that we would let them play against each other. One thing I also remember is that we created a self learning algorithm that would try to evaluate and from different winning patterns in the game. At the point in time we did not have an idea about neural networks. 
+
+Then in 2025, during a summer vacation, by the pool, I redeveloped the game making use of Google's Collab environment on an Ipad. I used Gemini and ChatGPT to support with the model setup. It was an excercise to learn how to use Tensorflow and PyTorch libraries. 
+
+In early 2026 I played around with Cursor and prompted the agentic platform to create this game using a AlphaZero-style approach to let a neural network learn the game by itself. Later on I switch to Claude Code and the current implementation has been improved by this agentic platform.  
+
 ## Setup
 
 ```bash
